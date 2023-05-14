@@ -21,19 +21,27 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
         panic(err)
     }
 
-		// TODO: backend handle request
-		
+		// backend handle request + error handling
+		err := service.SaveApp(&app)
+		if err != nil {
+			panic(err)
+		}
+
 		// return 
     fmt.Fprintf(w, "Upload request received: %s\n", app.Description)
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Received one search request")
+
+	// set return type to json 
 	w.Header().Set("Content-Type", "application/json")
+
+	// get params from query
 	title := r.URL.Query().Get("title")
 	description := r.URL.Query().Get("description")
 
-
+	// 
 	var apps []model.App
 	var err error
 	apps, err = service.SearchApps(title, description)
@@ -42,7 +50,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 			return
 	}
 
-
+	// construct return
 	js, err := json.Marshal(apps)
 	if err != nil {
 			http.Error(w, "Failed to parse Apps into JSON format", http.StatusInternalServerError)

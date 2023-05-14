@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"reflect"
 
 	"appstore/backend"
@@ -8,20 +9,24 @@ import (
 	"appstore/model"
 
 	"github.com/olivere/elastic/v7"
+
+	"appstore/gateway/stripe"
 )
 
 
 func SearchApps(title string, description string) ([]model.App, error) {
    if title == "" {
-       return SearchAppsByDescription(description)
+       return SearchAppsByField("description", description)
    }
    if description == "" {
-       return SearchAppsByTitle(title)
+       return SearchAppsByField("title", title)
    }
 
    // 1. construct search query
    query1 := elastic.NewMatchQuery("title", title)
+   query1.Operator("AND")
    query2 := elastic.NewMatchQuery("description", description)
+   query2.Operator("AND")
    query := elastic.NewBoolQuery().Must(query1, query2)
 
    // 2. call backend
@@ -35,30 +40,11 @@ func SearchApps(title string, description string) ([]model.App, error) {
    return getAppFromSearchResult(searchResult), nil
 }
 
-
-func SearchAppsByTitle(title string) ([]model.App, error) {
-   query := elastic.NewMatchQuery("title", title)
-   query.Operator("AND")
-   if title == "" {
-       query.ZeroTermsQuery("all")
-   }
-
-   // 2. call backend
-   searchResult, err := backend.ESBackend.ReadFromES(query, constants.APP_INDEX)
-   if err != nil {
-       return nil, err
-   }
-
-   // 3. process result
-   return getAppFromSearchResult(searchResult), nil
-}
-
-
-func SearchAppsByDescription(description string) ([]model.App, error) {
+func SearchAppsByField(field string, value string) ([]model.App, error) {
    // 1. construct search query
-   query := elastic.NewMatchQuery("description", description)
+   query := elastic.NewMatchQuery(field, value)
    query.Operator("AND")
-   if description == "" {
+   if field == "" {
        query.ZeroTermsQuery("all")
    }
 
@@ -67,7 +53,7 @@ func SearchAppsByDescription(description string) ([]model.App, error) {
    if err != nil {
        return nil, err
    }
-   
+
    // 3. process result
    return getAppFromSearchResult(searchResult), nil
 }
@@ -90,7 +76,6 @@ func SearchAppsByID(appID string) (*model.App, error) {
    return nil, nil
 }
 
-
 func getAppFromSearchResult(searchResult *elastic.SearchResult) []model.App {
    var ptype model.App
    var apps []model.App
@@ -100,3 +85,29 @@ func getAppFromSearchResult(searchResult *elastic.SearchResult) []model.App {
    }
    return apps
 }
+
+func SaveApp(app *model.App) error {
+    // 1. create price & product in stripe 
+    productID, priceID, err := stripe.CreateProductWithPrice(app.Title, app.Description, int64(app.Price*100))
+    if err != nil {
+        fmt.Printf("Failed to create Product and Price using Stripe SDK %v\n", err)
+        return err
+    }
+
+    // update productID + price ID to the app 
+    app.ProductID = productID
+    app.PriceID = priceID
+    fmt.Printf("Product %s with price %s is successfully created", productID, priceID)
+ 
+   // 2. save image to GCS 
+   err = backend.ESBackend.SaveToES(app, constants.APP_INDEX, app.Id)
+    if err != nil {
+        fmt.Printf("Failed to save app to elastic search with app index %v\n", err)
+        return err
+    }
+    fmt.Println("App is saved successfully to ES app index.")
+ 
+    return nil
+ 
+ }
+ 
