@@ -1,16 +1,17 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"mime/multipart"
 	"reflect"
 
 	"appstore/backend"
 	"appstore/constants"
+	"appstore/gateway/stripe"
 	"appstore/model"
 
 	"github.com/olivere/elastic/v7"
-
-	"appstore/gateway/stripe"
 )
 
 
@@ -58,24 +59,6 @@ func SearchAppsByField(field string, value string) ([]model.App, error) {
    return getAppFromSearchResult(searchResult), nil
 }
 
-func SearchAppsByID(appID string) (*model.App, error) {
-   // 1. construct search query
-   query := elastic.NewTermQuery("id", appID)
-
-   // 2. call backend
-   searchResult, err := backend.ESBackend.ReadFromES(query, constants.APP_INDEX)
-   if err != nil {
-       return nil, err
-   }
-
-   // 3. process result
-   results := getAppFromSearchResult(searchResult)
-   if len(results) == 1 {
-       return &results[0], nil
-   }
-   return nil, nil
-}
-
 func getAppFromSearchResult(searchResult *elastic.SearchResult) []model.App {
    var ptype model.App
    var apps []model.App
@@ -86,7 +69,7 @@ func getAppFromSearchResult(searchResult *elastic.SearchResult) []model.App {
    return apps
 }
 
-func SaveApp(app *model.App) error {
+ func SaveApp(app *model.App, file multipart.File) error {
     // 1. create price & product in stripe 
     productID, priceID, err := stripe.CreateProductWithPrice(app.Title, app.Description, int64(app.Price*100))
     if err != nil {
@@ -98,9 +81,16 @@ func SaveApp(app *model.App) error {
     app.ProductID = productID
     app.PriceID = priceID
     fmt.Printf("Product %s with price %s is successfully created", productID, priceID)
- 
-   // 2. save image to GCS 
-   err = backend.ESBackend.SaveToES(app, constants.APP_INDEX, app.Id)
+
+    // save uploaded App data to GCS
+    medialink, err := backend.GCSBackend.SaveToGCS(file, app.Id)
+    if err != nil {
+        return err
+    }
+    app.Url = medialink
+    
+    // save uploaded App data to ES
+    err = backend.ESBackend.SaveToES(app, constants.APP_INDEX, app.Id)
     if err != nil {
         fmt.Printf("Failed to save app to elastic search with app index %v\n", err)
         return err
@@ -108,6 +98,49 @@ func SaveApp(app *model.App) error {
     fmt.Println("App is saved successfully to ES app index.")
  
     return nil
- 
  }
  
+ 
+
+ func SearchAppByID(appID string) (*model.App, error) {
+    // 1. construct search query
+    query := elastic.NewTermQuery("id", appID)
+
+    // 2. call backend
+    searchResult, err := backend.ESBackend.ReadFromES(query, constants.APP_INDEX)
+    if err != nil {
+        return nil, err
+    }
+
+    // 3. process result
+    results := getAppFromSearchResult(searchResult)
+    if len(results) == 1 {
+        return &results[0], nil
+    }
+
+    // error handling
+    return nil, nil
+ }
+ 
+
+ func CheckoutApp(domain string, appID string) (string, error) {
+    //appID --> priceID
+    app, err := SearchAppByID(appID)
+    if err != nil {
+        return "", err
+    }
+    if app == nil {
+        return "", errors.New("unable to find app in elasticsearch")
+    }
+
+    // Create a checkout session by passing in PriceID
+    return stripe.CreateCheckoutSession(domain, app.PriceID)
+ }
+ 
+ func DeleteApp(id string, user string) error {
+    query := elastic.NewBoolQuery()
+    query.Must(elastic.NewTermQuery("id", id))
+    query.Must(elastic.NewTermQuery("user", user))
+    
+    return backend.ESBackend.DeleteFromES(query, constants.APP_INDEX)
+ }
