@@ -2,6 +2,7 @@ package backend
 
 import (
 	"appstore/constants"
+	"appstore/util"
 	"context"
 	"fmt"
 
@@ -16,13 +17,13 @@ type ElasticsearchBackend struct {
     client *elastic.Client
 }
 
-func InitElasticsearchBackend() {
+func InitElasticsearchBackend(config *util.ElasticsearchInfo) {
     // establish DB connection
     // 1. create new client
     // 2. set client into ES Backend
     client, err := elastic.NewClient(
-        elastic.SetURL(constants.ES_URL),
-        elastic.SetBasicAuth(constants.ES_USERNAME, constants.ES_PASSWORD))
+        elastic.SetURL(config.Address),
+        elastic.SetBasicAuth(config.Username, config.Password))
     if err != nil {
         panic(err)
     }
@@ -96,7 +97,7 @@ func (backend *ElasticsearchBackend) SaveToES(i interface{}, index string, id st
         Id(id).
         BodyJson(i).
         Do(context.Background())
-        
+
     return err
 }
 
