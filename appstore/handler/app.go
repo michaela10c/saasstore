@@ -9,6 +9,8 @@ import (
 	"appstore/model"
 	"appstore/service"
 
+	jwt "github.com/form3tech-oss/jwt-go"
+	"github.com/gorilla/mux"
 	"github.com/pborman/uuid"
 )
 
@@ -19,19 +21,23 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse from body of request to get a json object.
 	fmt.Println("Received one upload request")
 
+	token := r.Context().Value("user")
+	claims := token.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"]
+
 	app := model.App{
 			Id:          uuid.New(),
-			User:        r.FormValue("user"),
+			User:        username.(string),
 			Title:       r.FormValue("title"),
 			Description: r.FormValue("description"),
 	}
 	
-	price, err := strconv.Atoi(r.FormValue("price"))
+	price, err := strconv.ParseFloat(r.FormValue("price"), 64)
 	fmt.Printf("%v,%T", price, price)
 	if err != nil {
 			fmt.Println(err)
 	}
-	app.Price = price
+	app.Price = int(price * 100.0)
 
 	
 	file, _, err := r.FormFile("media_file")
@@ -49,8 +55,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 	}
 	
-	fmt.Println("App is saved successfully.")
-	fmt.Fprintf(w, "Upload request received: %s\n", app.Description)
+	fmt.Fprintf(w, "App is saved successfully: %s\n", app.Description)
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +107,23 @@ func checkoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	// notify start of checkout process
 	fmt.Println("Checkout process started!")
+}
+
+func deleteHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Received one request for delete")
+
+	user := r.Context().Value("user")
+	claims := user.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"].(string)
+	id := mux.Vars(r)["id"]
+
+	if err := service.DeleteApp(id, username); err != nil {
+		http.Error(w, "Failed to delete app from backend", http.StatusInternalServerError)
+		fmt.Printf("Failed to delete app from backend %v\n", err)
+		return
+	}
+
+	fmt.Println("App is deleted successfully")
 }
 
 
