@@ -29,8 +29,9 @@ func InitRouter(config *util.TokenInfo) http.Handler {
     router.Handle("/signin", http.HandlerFunc(signinHandler)).Methods("POST")
     router.Handle("/signup", http.HandlerFunc(signupHandler)).Methods("POST")
 
-    originsOk := handlers.AllowedOrigins([]string{"*"})
-    headersOk := handlers.AllowedHeaders([]string{"Authorization", "Content-Type"})
-    methodsOk := handlers.AllowedMethods([]string{"GET", "POST", "DELETE"})
+    // support for cross-origin resource sharing (CORS)
+    originsOk := handlers.AllowedOrigins([]string{"*"}) // allow ALL origins
+    headersOk := handlers.AllowedHeaders([]string{"Authorization", "Content-Type"}) // allow authorization + content type headers
+    methodsOk := handlers.AllowedMethods([]string{"GET", "POST", "DELETE"}) // allow GET, POST, DELETE methods
     return handlers.CORS(originsOk, headersOk, methodsOk)(router)
 }
