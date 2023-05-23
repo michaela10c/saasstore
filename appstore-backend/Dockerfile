@@ -15,4 +15,4 @@ RUN go get github.com/pborman/uuid
 RUN go get gopkg.in/yaml.v2
 
 EXPOSE 8080
-CMD ["usr/local/go/bin/go", "run", "main.go"]
+CMD ["/usr/local/go/bin/go", "run", "main.go"]
