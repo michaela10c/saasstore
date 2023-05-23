@@ -1,4 +1,4 @@
-const domain = ""; // TODO: Need to debug the deployment process
+const domain = "https://appstore-387603.uk.r.appspot.com";
 
 const handleResponseStatus = (response, errMsg) => {
   const { status, ok } = response;
