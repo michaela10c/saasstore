@@ -80,10 +80,10 @@ func InitElasticsearchBackend(config *util.ElasticsearchInfo) {
 
 func (backend *ElasticsearchBackend) ReadFromES(query elastic.Query, index string) (*elastic.SearchResult, error) {
 	searchResult, err := backend.client.Search(). 
-			Index(index).
-			Query(query).
-			Pretty(true).
-			Do(context.Background())
+			Index(index). // search in index "twitter"
+			Query(query). // specify query
+			Pretty(true). // pretty print request + response JSOn
+			Do(context.Background()) // execute
 	if err != nil {
 			return nil, err
 	}
